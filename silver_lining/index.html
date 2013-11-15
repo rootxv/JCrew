@@ -1,0 +1,315 @@
+<html>
+<head>
+<script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css"/>
+
+<style>
+body {font-size:10pt;font-family:Verdana,Arial,sans-serif;}
+.draggable {position:absolute; border: 4px solid #E60000;cursor:move;}
+.desc_container {position:relative; background:#CCCCCC;padding:0.6em;
+	box-shadow:2px 2px 4px rgba(0,0,0,0.5);}
+.desc_container div {text-align:right;font-size:8pt;text-decoration:underline;}
+.desc {position:relative; border:none;}
+.mini_button {padding-right:0.6em;padding-top:0.6em;}
+.line {position:absolute;height:4px;background:#E60000;
+	-webkit-transform-origin: 0 50%;
+	-ms-transform-origin:0 50%;
+	-moz-transform-origin:0 50%;
+	-o-transfrom-origin:0 50%;}
+textarea {resize: none;}
+textarea:focus {outline:none;}
+#container {position:absolute; left:0px; top:0px;}
+
+#start {position:absolute;top:60px;left:-12px;width:40px;height:28px;}
+#save {position:relative;padding:0.2em;}
+#cancel {position:relative;padding:0.2em;}
+#drag_tab {position:absolute;left:100px;top:0px;width:9px;height:28px;
+	background-image: url('images/drag_tab.png');}
+#tool_container {left:-3px;top:60px;background:#FFF;border-width:3px;padding:0.2em;}
+#rect_btn {position:relative;left:1.2em;}
+#line_btn {position:relative;left:2.4em;}
+
+#bg {position:absolute;z-index: -5}
+#canvas_container {position:absolute;left:0px;top:0px;}
+#canvas_container canvas {position:absolute;cursor:crosshair;}
+</style>
+
+<script>
+	var divs = [];
+	var boxing = false;
+	var SAVE_DATA;
+	var tool_default,tool,canvas,context;
+	var tx,ty,tw,th;
+	var tx2,ty2;
+
+	$(function(){
+		$("#tool_container").hide();
+		$(".draggable").draggable();
+		tool_default = 'rect';
+		if(tools[tool_default]){
+			tool = new tools[tool_default]();
+		}
+		$("#canvas_container").width($(document).width());
+		$("#canvas_container").height($(document).height());
+	});
+	function getPosition(el){
+		var top = 0, left = 0;
+		while(el){
+			left += el.offsetLeft;
+			top += el.offsetTop;
+			el = el.offsetParent;
+		}
+		var temp = []; temp.push[left]; temp.push[top];
+		return [left,top];
+	}
+	function getDimensions(el){
+		var temp = [];
+		if($(el).hasClass('line')){
+			temp.push(el.trans); temp.push(el.len);
+		}else{
+			temp.push($(el).width());temp.push($(el).height());
+		}
+		return temp;
+	}
+	function getDescription(el){
+		var temp = $(el).find('div'); var temp2 = $(temp).find('textarea').val();
+		if(temp2=="" || temp2==null){return "no description";}
+		return temp2;
+	}
+	function getParams(el){
+		var temp = getPosition(el);var temp2 = getDimensions(el);
+		temp.push(temp2[0]); temp.push(temp2[1]);
+		temp.push(getDescription(el));
+		return temp;
+	}
+	function changeDrawingState(){
+		if(boxing == true){
+			boxing = false;
+			endCanvas();
+			return;
+		}
+		initCanvas();
+		boxing = true;
+	}
+	function initCanvas(){
+		canvas = document.createElement('canvas');
+		context = canvas.getContext('2d');
+		canvas.addEventListener('mousedown',ev_canvas,false);
+		canvas.addEventListener('mousemove',ev_canvas,false);
+		canvas.addEventListener('mouseup',ev_canvas,false);
+		var temp = document.getElementById('canvas_container');
+		canvas.width = temp.clientWidth;
+		canvas.height = temp.clientHeight;
+		temp.appendChild(canvas);
+	}
+	function endCanvas(){
+		var temp = document.getElementById("canvas_container")
+		temp.removeChild(canvas);
+	}
+	function ev_canvas(ev){
+		if(ev.layerX || ev.layerX == 0){
+			ev._x = ev.layerX;
+			ev._y = ev.layerY;
+		}else if(ev.offsetX || ev.offsetX == 0){
+			ev._x = ev.offsetX;
+			ev._y = ev.offsetY;
+		}
+		var func = tool[ev.type];
+		if(func){func(ev);}
+	}
+	var tools = {};
+	tools.rect = function () {
+		var tool = this;
+    	this.started = false;
+    	this.mousedown = function (ev) {
+      		tool.started = true;
+      		tool.x0 = ev._x;
+      		tool.y0 = ev._y;
+      		context.strokeStyle="#E60000";
+			context.lineWidth = 4;
+    	};
+    	this.mousemove = function (ev) {
+      		if (!tool.started) {return;}
+      		var x = Math.min(ev._x,  tool.x0),
+          	y = Math.min(ev._y,  tool.y0),
+          	w = Math.abs(ev._x - tool.x0),
+          	h = Math.abs(ev._y - tool.y0);
+      		context.clearRect(0, 0, canvas.width, canvas.height);
+      		if (!w || !h) {return;}
+      		context.strokeRect(x, y, w, h);
+      		tx=x-2;ty=y-2;tw=w-4;th=h-4;
+    	};
+    	this.mouseup = function (ev) {
+      		if (tool.started) {
+        		tool.mousemove(ev);
+        		addBox(tx,ty,tw,th);
+        		tool.started = false;
+      		}
+      		context.clearRect(0,0,canvas.width, canvas.height);
+  		};
+    };
+    tools.line = function(){
+    	var tool = this;
+    	this.started = false;
+    	this.mousedown = function(ev){
+    		tool.started = true;
+    		tool.x0 = ev._x;
+    		tool.y0 = ev._y;
+    		context.strokeStyle="#E60000";
+			context.lineWidth = 4;
+    	};
+    	this.mousemove = function(ev){
+    		if(!tool.started){return;}
+    		context.clearRect(0,0,canvas.width,canvas.height);
+    		context.beginPath();
+    		context.moveTo(tool.x0, tool.y0);
+    		context.lineTo(ev._x, ev._y);
+    		context.stroke();
+    		context.closePath();
+    		tx2=ev._x; ty2=ev._y;
+    	};
+    	this.mouseup = function(ev){
+    		if(tool.started){
+    			tool.mousemove(ev);
+    			addLine(tool.x0,tool.y0,tx2,ty2);
+    			tool.started = false;
+    		}
+    		context.clearRect(0,0,canvas.width,canvas.height);
+    	};
+    };
+    function setTool(t){
+    	tool = new tools[t]();
+    }
+	function addBox(x,y,w,h){
+		var div = document.createElement('div');
+		div.classList.add("draggable");
+		div.style.height = h; div.style.width = w; div.style.top = y; div.style.left = x;
+		div.style.position="absolute";
+		$(div).draggable();
+		document.getElementById("container").appendChild(div);
+		divs.push(div);
+		addDescription(div);
+	}
+	function removeBox(box){
+		var index = divs.indexOf(box);
+		document.getElementById("container").removeChild(box);
+		divs = jQuery.grep(divs,function(value){
+			return value != box;
+		});
+	}
+	function addLine(x1,y1,x2,y2){
+		var length = Math.sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2));
+		var angle = Math.atan2(y2-y1,x2-x1)*180/Math.PI;
+		var transform = 'rotate('+angle+'deg)';
+		var line = document.createElement('div'); line.classList.add("line");
+		line.style.width = length; $(line).css({'transform':transform});
+		line.style.left = x1; line.style.top = y1-2;
+		line.trans = transform; line.len = length;
+		document.getElementById("container").appendChild(line);
+		var ah = $('<img>')
+			.attr('src','images/arrow_head.png')
+			.appendTo(line)
+			.css({'position':'absolute','left':length+'px','top':'-8'});
+		divs.push(line);
+		$(ah).click(function(){
+			removeBox(line);
+		});
+	}
+	function addDescription(div){
+		var des_div = document.createElement('div'); des_div.classList.add("desc_container");
+		var des = document.createElement('textarea'); des.classList.add("desc");
+		des.style.height = 75; des.style.width = 230;
+		des_div.style.width = 230;
+		des_div.style.top = $(div).height()+12;
+		des_div.appendChild(des);
+		var sb = document.createElement('input'); sb.classList.add("mini_button");
+		sb.type = "image"; sb.src = "images/save_button.png";
+		$(sb).click(function(){
+			$(sb).hide();$(cb).hide();$(edit).fadeIn();
+			if($(des).val()==""){
+				$(des_div).fadeOut();
+				return;
+			}
+			$(des).attr('readonly','readonly');
+			des.style.background = "#CCCCCC";
+		});
+		des_div.appendChild(sb);
+		var cb = document.createElement('input'); cb.classList.add("mini_button");
+		cb.type = "image"; cb.src = "images/cancel_button.png";
+		$(cb).click(function(){
+			removeBox(div);
+		});
+		des_div.appendChild(cb);
+		var arr = document.createElement('input');
+		arr.type = "image"; arr.src = "images/desc_arrow.png"; arr.style.position="absolute";
+		arr.style.left = 23; arr.style.top = -8;
+		des_div.appendChild(arr);
+		var edit = document.createElement('div');
+		$(edit).text("edit");
+		$(edit).hide();
+		$(edit).click(function(){
+			$(edit).hide();$(sb).fadeIn();$(cb).fadeIn();
+			$(des).attr('readonly',false);
+			des.style.background = "#FFFFFF";
+		});
+		des_div.appendChild(edit);
+		div.appendChild(des_div);
+	}
+	function showToolBox(){
+		changeDrawingState();		
+		$("#start").hide();
+		$("#tool_container").fadeIn();
+	}
+	function hideToolBox(){
+		$("#tool_container").hide();
+		$("#start").fadeIn();
+	}
+	function cancelBoxing(){
+		hideToolBox();
+		changeDrawingState();
+		$('#container .draggable').remove();
+		$('#container .line').remove();
+		divs = [];
+	}
+	function saveBoxes(){
+		var temp = [];
+		for(var i=0; i<divs.length; i++){
+			temp.push(getParams(divs[i]));
+		}
+		//CODE TO SAVE DATA TO SERVER WILL GO HERE
+		//return;
+		SAVE_DATA = temp;
+		alert(temp);
+	}
+	function getJiraId(){
+		return;
+	}
+	function loadSilverLines(){
+		return;
+	}
+	
+</script>
+
+</head>
+<body>
+
+<img id="bg" src="images/bg.png">
+
+<div id="canvas_container"></div>
+<div id="container"></div>
+
+<input type="image" id="start" src="images/plus.png" onClick=showToolBox()>
+<div id="tool_container" class="draggable">
+	<div id="drag_tab"></div>
+	<div>
+		<input type="image" id="rect_btn" src="images/rect_button.png" onClick=setTool('rect')>
+		<input type="image" id="line_btn" src="images/line_button.png" onClick=setTool('line')>
+	</div>
+	<input type="image" id="save" src="images/save_button.png" onClick=saveBoxes()>
+	<div>
+	<input type="image" id="cancel" src="images/cancel_button.png" onClick=cancelBoxing()>
+	</div>
+</div>
+</body>
+</html>
